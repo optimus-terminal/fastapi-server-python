@@ -1,0 +1,11 @@
+[mlflow.model_registry_store]
+arn = sagemaker_mlflow.mlflow_sagemaker_registry_store:MlflowSageMakerRegistryStore
+
+[mlflow.request_auth_provider]
+arn = sagemaker_mlflow.auth_provider:AuthProvider
+
+[mlflow.request_header_provider]
+arn = sagemaker_mlflow.mlflow_sagemaker_request_header_provider:MlflowSageMakerRequestHeaderProvider
+
+[mlflow.tracking_store]
+arn = sagemaker_mlflow.mlflow_sagemaker_store:MlflowSageMakerStore
