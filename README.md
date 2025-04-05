@@ -82,7 +82,7 @@ To run tests, run the following command:
 ```bash
 $ pants test :: # To run all tests
 $ pants test tests/optimus_terminal/:: # To run tests in a specific folder
-$ pants test tests/optimus_terminal/test_entity.py # To run tests in a specific file
+$ pants test tests/optimus_terminal/fastapi.py # To run tests in a specific file
 ```
 
 To run formatting tools, run the following command:
@@ -93,7 +93,26 @@ $ pants fmt src/optimus_terminal/:: # To run formatting tools in a specific fold
 $ pants fmt src/optimus_terminal/entity/entity_core.py # To run formatting tools in a specific file
 ```
 
-# Start Server
+# Start Server, inside the cicd-pipeline-python file, not CICD_PYTHON
+```zsh
+$ pants run src/optimus_terminal/fast_api/main.py
+```
+
+
+# Steps on resolving "yf.Ticker.History()" not working
+Whole situation is caused by the yfinance has latest updates which causes the previous version not working
+1. pip install yfinance --upgrade --no-cache-dir
+   Checking of version: pip show yfinance 
+
+2. Update requirements.txt's yfinance version with
+ - Manually: yfinance==0.2.{} 
+ - pip freeze > requirements.txt
+
+3. Regenerate update lockfiles 
+ - pants generate-lockfiles [Used this before], or 
+ - pants generate-lockfiles --resolve=python-default
+
+4. Start the server with 
 ```zsh
 $ pants run src/optimus_terminal/fast_api/main.py
 ```

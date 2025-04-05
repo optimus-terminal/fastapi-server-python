@@ -1,12 +1,14 @@
 # For FASTAPI and API requests
 # For os and environment variables for Langchain OpenAI and langchain agent
+import logging
 import os
+import random
 
 import requests
 import uvicorn
 import yfinance as yf
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, status
 
 # For Langchain
 from langchain.agents import AgentType, initialize_agent
@@ -20,6 +22,7 @@ from optimus_terminal.models import (
     StockRequestData,
     StockRequestLangChain,
     StockResponse,
+    WatchListElement,
 )
 
 # Obtain environment variables
@@ -119,6 +122,79 @@ def stockPrice(symbol: str, period: str = "1d"):
         return StockResponse(symbol=symbol.upper(), entries=entries)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/watchlist")
+def getMyWatchList():
+    final_watchlist = []
+    watchList = [
+        "NVDA",
+        "AAPL",
+        "GS",
+        "JPM",
+        "GOOG",
+        "MSFT",
+        "AMZN",
+        "TSLA",
+        "META",
+        "NFLX",
+        "PEP",
+        "KO",
+        "INTC",
+        "CSCO",
+        "ORCL",
+        "ADBE",
+        "CRM",
+    ]
+
+    for symbol in watchList:
+        try:
+            ticker = yf.Ticker(symbol)
+            vol = round(float(ticker.info["volume"]), 2)
+            avgVol = round(float(ticker.info["averageVolume"]), 2)
+            mktCap = round(float(ticker.info["marketCap"]), 2)
+
+            hist = ticker.history(
+                period="1d",
+                interval="1d",
+                auto_adjust=False,
+                back_adjust=False,
+                actions=False,
+            )
+
+            if hist.empty:
+                raise HTTPException(
+                    status_code=404, detail="No data found for the given symbol."
+                )
+
+            last = round(float(hist["Close"].iloc[-1]), 2)
+            changePercentage = round(random.uniform(-0.04, 0.02), 2)
+            change = round(last * changePercentage, 2)
+            last = round(last + change, 2)
+
+            watchListEle = WatchListElement(
+                ticker=symbol,
+                last=last,
+                change=change,
+                changePer=changePercentage,
+                volume=vol,
+                avgVolume=avgVol,
+                marketCapacity=mktCap,
+            )
+
+            final_watchlist.append(watchListEle)
+            print(f"Success: {ticker} watchList data")
+
+        except HTTPException as http_err:
+            logging.error(f"HTTPException for symbol {symbol}: {http_err}")
+
+        except KeyError as key_err:
+            logging.error(f"KeyError for symbol {symbol}: {key_err}")
+
+        except Exception as e:
+            logging.error(f"During processing {symbol}: {e}")
+
+    return final_watchlist
 
 
 if __name__ == "__main__":

@@ -56,13 +56,37 @@ def test_stock_price_api():
             assert isinstance(entry["volume"], int)
 
 
-def test_stock_news_langchain():
+def test_watchList_api():
     with patch("optimus_terminal.fast_api.main.requests.get") as mock_requests_get:
-        payload = {"symbol": "AAPL"}
-
         mock_requests_get.return_value.status_code = 200
-        response = client.post("/stock-news-langchain", json=payload)
+        response = client.get("/watchlist")
 
         assert response.status_code == 200
-        assert "result" in response.json()
-        assert isinstance(response.json().get("result"), str)
+        response_data = response.json()
+
+        for entry in response_data:
+            assert set(entry.keys()) == {
+                "ticker",
+                "last",
+                "change",
+                "changePer",
+                "volume",
+                "avgVolume",
+                "marketCapacity",
+            }
+
+            assert isinstance(entry["ticker"], str)
+            assert isinstance(entry["last"], (int, float))
+            assert entry["last"] > 0
+
+            assert isinstance(entry["change"], (int, float))
+            assert isinstance(entry["changePer"], (int, float))
+
+            assert isinstance(entry["volume"], (int, float))
+            assert entry["volume"] >= 0
+
+            assert isinstance(entry["avgVolume"], (int, float))
+            assert entry["avgVolume"] >= 0
+
+            assert isinstance(entry["marketCapacity"], (int, float))
+            assert entry["marketCapacity"] > 0

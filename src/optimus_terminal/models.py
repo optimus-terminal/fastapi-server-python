@@ -27,3 +27,13 @@ class StockEntry(BaseModel):
 class StockResponse(BaseModel):
     symbol: str
     entries: List[StockEntry]
+
+
+class WatchListElement(BaseModel):
+    ticker: str
+    last: float
+    change: float
+    changePer: float
+    volume: float
+    avgVolume: float
+    marketCapacity: float
