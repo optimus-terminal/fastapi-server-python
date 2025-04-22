@@ -373,11 +373,9 @@ def align_df(df, df_index):
 
 # ticker: ten/aia
 # model: lr, xgb, lgb
-@app.get("/ml/{ticker}/{model}")
-def getTickerPrediction(ticker: str, model: str):
-    # Connection to futubull api
-    #  a. Fetching data for both independent stocks and index stocks
-
+@app.get("/ml/{ticker}/{model}/forecast/{days}")
+def getTickerForecast(ticker: str, model: str, days: int = 30):
+    # Get initial data
     ticker_code = ticker_dictionary[ticker.upper()]
     df = data_collection_futu(ticker_code)
     df_index = data_collection_futu(ticker_dictionary["HKEX"])
@@ -385,34 +383,15 @@ def getTickerPrediction(ticker: str, model: str):
     df_aligned, df_index_aligned, date_df = align_df(df, df_index)
     df, df_index = df_aligned, df_index_aligned
 
-    date_df = date_df.iloc[50:, :]
-    date_df = date_df.reset_index(drop=True)
+    # Create a copy for forecasting
+    forecast_df = df.copy()
+    forecast_index_df = df_index.copy()
 
-    # print(f"{ticker} Data: ")
-    # print(df)
-    # print("HKEX Data: ")
-    # print(df_index)
-    # print("Date df: ")
-    # print(date_df)
+    # Initialize predictions list
+    all_predictions = []
+    forecast_dates = []
 
-    df_part1 = data_preprocessing(df)
-    X_test, df_part2 = index_processing(df_part1, df_index)
-
-    # print("HKEX Data: ")
-    # print(df_part2)
-
-    # print("X_test   : ")
-    # print(X_test)
-
-    csv_file = io.StringIO()
-    X_test.to_csv(csv_file, sep=",", header=False, index=False)
-    X_test_payload = csv_file.getvalue()
-
-    # Connection to AWS client
-    #  a. Get access to the model in endpoint
-    #  b. Receiving output and returning it back to client side
-
-    # Create a SageMaker runtime client object using your IAM role ARN
+    # Set up AWS client
     runtime = boto3.client(
         "sagemaker-runtime",
         aws_access_key_id="",
@@ -421,48 +400,79 @@ def getTickerPrediction(ticker: str, model: str):
     )
 
     endpoint_key = ticker.upper() + "-" + model
-    print("LOG:     ", endpoint_key, ": ", endpoint_dictionary[endpoint_key])
+    endpoint_name = endpoint_dictionary[endpoint_key]
 
-    # Sending Request
-    if model != "lgb":
+    # Start date for predictions (last date in data + 1)
+    last_date = date_df["Date"].iloc[-1]
+
+    # Loop for each day we want to predict
+    for i in range(days):
+        # Process the current data state
+        df_features = data_preprocessing(forecast_df)
+        X_test, _ = index_processing(df_features, forecast_index_df)
+
+        # Prepare data for model input
+        if model != "lgb":
+            csv_file = io.StringIO()
+            X_test.to_csv(csv_file, sep=",", header=False, index=False)
+            payload = csv_file.getvalue()
+        else:
+            payload = X_test.to_csv(header=False, index=False).encode("utf-8")
+
+        # Get prediction from model
         response = runtime.invoke_endpoint(
-            EndpointName=endpoint_dictionary[endpoint_key],
-            ContentType="text/csv",
-            Body=X_test_payload,
-        )
-    else:
-        response = runtime.invoke_endpoint(
-            EndpointName=endpoint_dictionary[endpoint_key],
-            ContentType="text/csv",
-            Body=X_test.to_csv(header=False, index=False).encode("utf-8"),
+            EndpointName=endpoint_name, ContentType="text/csv", Body=payload
         )
 
-    # Handling Responses
-    if model == "lr":
-        output_data = json.loads(response["Body"].read().decode("utf-8"))
-        scores = [pred["score"] for pred in output_data["predictions"]]
-        # print(scores)
+        # Parse the response based on model type
+        if model == "lr":
+            output_data = json.loads(response["Body"].read().decode("utf-8"))
+            prediction = output_data["predictions"][-1]["score"]
+        elif model == "xgb":
+            output_data = response["Body"].read().decode("utf-8")
+            prediction = float(output_data.strip().split("\n")[-1])
+        elif model == "lgb":
+            output_data = json.loads(response["Body"].read())
+            prediction = output_data["prediction"][-1]
 
-    elif model == "xgb":
-        output_data = response["Body"].read().decode("utf-8")
-        scores = [float(line) for line in output_data.strip().split("\n") if line]
-        # print(scores)
+        # Calculate next date
+        next_date = last_date + timedelta(days=i + 1)
+        forecast_dates.append(next_date)
+        all_predictions.append(prediction)
 
-    elif model == "lgb":
-        output_data = json.loads(response["Body"].read())
-        scores = np.array(output_data["prediction"]).tolist()
-        # print(scores)
+        # Update the data with the new prediction for the next iteration
+        new_row_stock = {
+            "Date": next_date,
+            "close": prediction,
+            "last_close": forecast_df["close"].iloc[-1],  # Use previous day's close
+            "pe_ratio": forecast_df["pe_ratio"].iloc[
+                -1
+            ],  # Keep PE ratio constant for simplicity
+        }
 
-    dates = date_df["Date"].tolist()
-    count = min(len(dates), len(scores))
+        # For index data, you might want to use a simpler approach or a separate model
+        # This is a simplified approach assuming index follows similar pattern
+        new_row_index = {
+            "Date": next_date,
+            "close": forecast_index_df["close"].iloc[-1]
+            * (1 + random.uniform(-0.01, 0.01)),
+            "last_close": forecast_index_df["close"].iloc[-1],
+        }
 
+        # Append new rows to forecasting dataframes
+        forecast_df = pd.concat(
+            [forecast_df, pd.DataFrame([new_row_stock])], ignore_index=True
+        )
+        forecast_index_df = pd.concat(
+            [forecast_index_df, pd.DataFrame([new_row_index])], ignore_index=True
+        )
+
+    # Create response entries
     entries = []
-    for i in range(count):
-        next_day = dates[i] + timedelta(days=1)
-        date_str = next_day.strftime("%Y-%m-%d")
-        entries.append(MLEntry(date=date_str, predictedClose=scores[i]))
+    for i in range(len(all_predictions)):
+        date_str = forecast_dates[i].strftime("%Y-%m-%d")
+        entries.append(MLEntry(date=date_str, predictedClose=all_predictions[i]))
 
-    # print(output_data)
     return MLResponse(symbol=ticker.upper(), entries=entries)
 
 
