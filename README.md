@@ -93,7 +93,14 @@ $ pants fmt src/optimus_terminal/:: # To run formatting tools in a specific fold
 $ pants fmt src/optimus_terminal/entity/entity_core.py # To run formatting tools in a specific file
 ```
 
-# Start Server, inside the cicd-pipeline-python file, not CICD_PYTHON
+# 1. Setup Futu server with in the separate Futu Repo
+```zsh
+./FutuOpenD.app/Contents/MacOS/FutuOpenD 
+```
+# 2. Setup Environment Variables in aws console / in main.py boto3.client
+
+
+# 2. Start Server
 ```zsh
 $ pants run src/optimus_terminal/fast_api/main.py
 ```

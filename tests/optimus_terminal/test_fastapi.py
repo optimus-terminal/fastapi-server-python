@@ -1,9 +1,14 @@
+import os
 from unittest.mock import patch
 
 import pytest
+
+os.environ["HOME"] = "/tmp/mock_home"  # Futubull API will access the HOME env
+
+# flake8: noqa: E402
 from fastapi.testclient import TestClient
 
-from optimus_terminal.fast_api.main import app  # Import your FastAPI app
+from optimus_terminal.fast_api.main import app
 
 client = TestClient(app)
 

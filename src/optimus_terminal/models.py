@@ -37,3 +37,13 @@ class WatchListElement(BaseModel):
     volume: float
     avgVolume: float
     marketCapacity: float
+
+
+class MLEntry(BaseModel):
+    date: str
+    predictedClose: float
+
+
+class MLResponse(BaseModel):
+    symbol: str
+    entries: List[MLEntry]
